@@ -1,6 +1,11 @@
 fastapi
 uvicorn[standard]
-sqlalchemy>=2
+# psycopg takes `%s` placeholders natively; psycopg-pool handles pooling.
 psycopg
+psycopg-pool
 numpy
 pgvector
+
+# Optional: a bundled libpq that decodes rows faster than the pure-Python
+# binding. No aarch64 Android wheel exists, so on Termux build it from source:
+#   pip install --no-binary psycopg-c psycopg-c

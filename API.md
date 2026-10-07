@@ -6,8 +6,10 @@ All requests/responses are JSON (`Content-Type: application/json`). JSON keys ar
 Run with:
 
 ```bash
-python -m api.app
+python3 -m app
 ```
+
+Interactive docs: http://localhost:8000/docs
 
 ## Response envelope
 
@@ -35,14 +37,20 @@ Error:
 ### Subject
 
 ```json
-{"id": "physics", "name": "Physics", "chapter_count": 28, "question_count": 5097}
+{"id": "physics", "name": "Physics"}
 ```
 
 ### Chapter
 
 ```json
-{"id": "thermodynamics", "name": "Thermodynamics", "question_count": 95, "topic_count": 12}
+{"id": "thermodynamics", "name": "Thermodynamics", "question_count": 95}
 ```
+
+`name` is the id title-cased (`jee`/`ac`/`dc` stay upper, minor words stay lower after
+the first). Chapters are ordered by chapter group, then by id.
+
+`question_count` comes from a grouped subquery over `questions` (see
+`questions_subject_chapter_idx` in schema.sql).
 
 ### Topic
 
@@ -61,17 +69,16 @@ Used in list responses.
   "exam_group": "JEE",
   "subject": "physics",
   "chapter": "thermodynamics",
-  "chapter_group": "mechanics",
   "year": 2023,
   "paper_title": "JEE Main 2023 Session 1",
   "difficulty": "medium",
   "topic": "laws-of-thermodynamics",
-  "type": "mcq",
-  "exam_date": "2023-01-25",
-  "is_out_of_syllabus": false,
-  "is_bonus": false
+  "type": "mcq"
 }
 ```
+
+`exam` and `exam_group` are title-cased from their stored slugs. `subject`, `chapter` and
+`topic` are raw slugs.
 
 ### Full Question
 
@@ -79,18 +86,19 @@ Used in single-question and practice responses. Question Summary plus:
 
 ```json
 {
+  "is_bonus": false,
   "question": "<p>...</p>",
   "options": [{"identifier": "A", "content": "..."}],
   "correct_options": [0],
   "answer": "42",
-  "explanation": "<p>...</p>",
-  "is_img_question": false,
-  "is_img_explanation": false,
-  "is_img_option": false
+  "explanation": "<p>...</p>"
 }
 ```
 
 Integer-type questions carry the answer as a string in `answer` and have empty `correct_options`.
+
+`<img>` tags are inlined in `question`, `explanation` and `options[].content`, so no
+separate image flags are returned.
 
 ## Endpoints
 
@@ -99,6 +107,9 @@ Integer-type questions carry the answer as a string in `answer` and have empty `
 ```json
 {"data": {"status": "ok", "questions": 14973, "chapters": 91}}
 ```
+
+Counts both tables on every call, so it reflects the database as it is rather than import
+state.
 
 ### GET /api/v1/stats
 
@@ -114,30 +125,41 @@ Integer-type questions carry the answer as a string in `answer` and have empty `
 }
 ```
 
+Reads the `question_stats` materialized view, so counts are as-of the last refresh. Run
+`psql -d pyq -f scripts/refresh-question-stats.sql` after a bulk import. If the view is
+missing, the aggregates are computed live instead.
+
 ### GET /api/v1/subjects
 
 ```json
-{"data": [{"id": "physics", "name": "Physics", "chapter_count": 28, "question_count": 5097}]}
-```
-
-### GET /api/v1/subjects/{subject_id}/groups
-
-Chapter-group breakdown within a subject (e.g. `physical-chemistry`, `organic-chemistry`, `inorganic-chemistry` under chemistry).
-
-```json
-{"data": [{"id": "physical-chemistry", "name": "Physical Chemistry", "question_count": 1761}], "meta": {"subject": "chemistry"}}
+{"data": [{"id": "physics", "name": "Physics"}]}
 ```
 
 ### GET /api/v1/subjects/{subject_id}/chapters
 
+Chapter breakdown within a subject, each carrying its `question_count`.
+
+Query parameters:
+
+| param  | type | default | description                        |
+| ------ | ---- | ------- | ---------------------------------- |
+| limit  | int | 100     | page size, clamped to [0, 500]     |
+| offset | int | 0       | clamped to >= 0                    |
+
 ```json
 {
-  "data": [{"id": "kinematics", "name": "Kinematics", "question_count": 120, "topic_count": 8}],
-  "meta": {"subject": "physics"}
+  "data": [
+    {"id": "kinematics", "name": "Kinematics", "question_count": 120}
+  ],
+  "meta": {"subject": "physics", "total": 28, "limit": 100, "offset": 0, "has_more": false}
 }
 ```
 
-Unknown subject → `404` envelope.
+Chapters are ordered by chapter group, then by id. `total` counts every chapter in the
+subject, so `has_more` is correct across pages.
+
+Unknown subject → `404` envelope. A subject that exists but has no chapters returns
+`data: []` with `total: 0`, not a 404.
 
 ### GET /api/v1/chapters/{chapter_id}/topics
 
@@ -160,9 +182,13 @@ Query parameters:
 | difficulty | string | —       | filter by difficulty                     |
 | year       | int    | —       | filter by year                           |
 | type       | string | —       | filter by question type                  |
+| q          | string | —       | case-insensitive substring across `chapter`, `topic`, `paper_title`, `exam`, `exam_group` |
 | limit      | int    | 50      | page size, clamped to [0, 500]           |
 | offset     | int    | 0       | clamped to >= 0                          |
 | sort       | string | newest  | `newest`, `oldest`, or `random`          |
+| seed       | string | —       | pins `random` order across pages         |
+
+Non-numeric `limit`/`offset` fall back to the default rather than erroring.
 
 Response:
 
@@ -185,25 +211,50 @@ Unknown id → `404` envelope.
 
 ### GET /api/v1/practice
 
-Same filters as `/questions`; `limit` defaults to 10 and is clamped to [0, 50]. Returns Full Questions in random order.
+Same filters as `/questions`, plus:
+
+| param     | type   | default | description                                          |
+| --------- | ------ | ------- | ---------------------------------------------------- |
+| limit     | int    | 10      | page size, clamped to [0, 500]                       |
+| order     | string | random  | `newest`, `oldest`, or `random`; invalid falls back to `random` |
+| seed      | string | —       | pins `random` order across pages                     |
+| question  | string | —       | anchor question id, returned first                   |
+
+Returns Full Questions. `meta.total` is the number of rows returned; `meta.available` is
+the size of the filtered set, and `has_more` compares against it.
 
 ```json
-{"data": [{"id": "abc123", "...": "..."}], "meta": {"total": 10, "filters": {"chapter": "thermodynamics"}}}
+{"data": [{"id": "abc123", "...": "..."}], "meta": {"total": 10, "available": 95, "offset": 0, "has_more": true, "order": "random", "filters": {"chapter": "thermodynamics"}}}
 ```
+
+`question` fills the page with siblings of that question and sets `meta.anchored: true`.
+It is looked up subject to the same filters, so an id from a different chapter or subject
+is ignored and the ordinary page is returned instead. `offset` addresses this sequence:
+the anchor occupies position 0 and siblings follow, so pages advance under a `seed`.
+`limit=0` returns an empty page rather than just the anchor.
 
 ### GET /api/v1/cluster
 
 Query parameters:
 
-| param         | type  | default | description                 |
-| ------------- | ----- | ------- | --------------------------- |
-| chapter       | string| —       | filter by chapter           |
-| subject       | string| —       | filter by subject           |
-| topic         | string| —       | filter by topic             |
-| group         | string| —       | filter by chapter group     |
-| year          | int   | —       | filter by year              |
-| threshold     | float | 0.6     | cosine similarity threshold |
-| max_questions | int   | 2000    | clamped to [0, 20000]       |
+| param         | type   | default | description                 |
+| ------------- | ------ | ------- | --------------------------- |
+| subject       | string | —       | filter by subject           |
+| chapter       | string | —       | filter by chapter           |
+| topic         | string | —       | filter by topic             |
+| group         | string | —       | filter by chapter group     |
+| difficulty    | string | —       | filter by difficulty        |
+| type          | string | —       | filter by question type     |
+| year          | int    | —       | filter by year              |
+| q             | string | —       | substring search, as `/questions` |
+| threshold     | float  | 0.6     | cosine similarity threshold |
+| max_questions | int    | 2000    | clamped to [0, 20000]       |
+
+Clusters questions by cosine similarity, greedily: each vector joins the nearest existing
+cluster whose centroid clears `threshold`, otherwise it starts a new one. Centroid
+similarity uses raw dot products, so only vectors from `question_embeddings` are
+clustered; ids without one are returned in `missing_embedding`. `q` and `max_questions`
+take the same non-numeric fallback as `/questions`.
 
 ```json
 {

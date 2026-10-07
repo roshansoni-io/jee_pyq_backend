@@ -1,17 +1,41 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator, Iterator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+import psycopg
+from fastapi import Depends, FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import config
-from .db import engine
+from .db import close_pool, open_pool, pool
 from .routes import router
 
 logger = logging.getLogger("pyq")
+
+
+def get_conn(request: Request) -> Iterator[psycopg.Connection]:
+    """Yield one pooled connection for the request. Sync, so the checkout runs
+    in the threadpool instead of on the event loop."""
+    with pool.connection() as conn:
+        request.state.conn = conn
+        yield conn
+
+
+@asynccontextmanager
+async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    open_pool()
+    logger.info(
+        "pyq api ready: workers=%s pool_size=%s max_overflow=%s",
+        config.SERVER_WORKERS,
+        config.DB_POOL_SIZE,
+        config.DB_POOL_MAX_OVERFLOW,
+    )
+    yield
+    close_pool()
 
 
 def create_app() -> FastAPI:
@@ -20,17 +44,12 @@ def create_app() -> FastAPI:
         version="1.0.0",
         docs_url="/docs",
         openapi_url="/openapi.json",
+        lifespan=_lifespan,
     )
-    app.include_router(router)
-
-    @app.middleware("http")
-    async def db_conn(request: Request, call_next):
-        conn = engine.connect()
-        request.state.conn = conn
-        try:
-            return await call_next(request)
-        finally:
-            conn.close()
+    # No compression middleware: bulk responses travel over loopback to the
+    # server-side loaders, so compressing them costs CPU for no saved bandwidth.
+    # The dependency sits on the router, leaving /docs usable without a database.
+    app.include_router(router, dependencies=[Depends(get_conn)])
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error(_: Request, exc: StarletteHTTPException):
