@@ -1,0 +1,63 @@
+services:
+  db:
+    image: pgvector/pgvector:pg18-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pyq}
+      POSTGRES_USER: ${POSTGRES_USER:-pyq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+      - ./schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    shm_size: 256mb
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    init: true
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PYQ_DB_HOST: db
+      PYQ_DB_PORT: 5432
+      PYQ_DB_NAME: ${POSTGRES_DB:-pyq}
+      PYQ_DB_USER: ${POSTGRES_USER:-pyq}
+      PYQ_DB_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PYQ_DB_POOL_SIZE: ${PYQ_DB_POOL_SIZE:-5}
+      PYQ_DB_POOL_MAX_OVERFLOW: ${PYQ_DB_POOL_MAX_OVERFLOW:-5}
+      PYQ_WORKERS: ${PYQ_WORKERS:-1}
+      PYQ_HOST: 0.0.0.0
+      PYQ_PORT: 8000
+    ports:
+      - "${PYQ_BIND_ADDRESS:-127.0.0.1}:${PYQ_PORT:-8000}:8000"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health', timeout=3)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  postgres_data:

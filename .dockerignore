@@ -1,0 +1,13 @@
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+.local
+.venv
+__pycache__
+*.py[cod]
+*.dump
+*.log
+*.pkl
+tests
