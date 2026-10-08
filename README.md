@@ -6,7 +6,10 @@ Serves 14,973 JEE Main previous-year questions over HTTP. See `API.md` for the e
 
 The Compose stack runs the API and PostgreSQL 18 with pgvector. The database
 data lives in a named volume, and the API is bound to `127.0.0.1:8000` by
-default. Put a TLS reverse proxy in front of it for public deployments.
+default. Host and port for both the API (`PYQ_HOST`, `PYQ_PORT`) and the
+database connection (`PYQ_DB_HOST`, `PYQ_DB_PORT`) come from `.env` — nothing
+is hardcoded in the Compose file or Dockerfile. Put a TLS reverse proxy in
+front of it for public deployments.
 
 ```bash
 cp .env.example .env
@@ -100,7 +103,9 @@ schema from `schema.sql`, and the loader writes dates, shifts, and chapter numbe
 | `PYQ_DB_POOL_SIZE` / `PYQ_DB_POOL_MAX_OVERFLOW` | `10` / `10` |
 | `PYQ_HOST` / `PYQ_PORT` / `PYQ_WORKERS` | `0.0.0.0` / `8000` / `1` |
 
-Only real environment variables are read — nothing loads `.env`.
+`.env` in the repo root is loaded at startup; real environment variables take
+precedence. Inside Compose, `PYQ_DB_HOST`/`PYQ_DB_PORT` default to the `db`
+service and `5432`; everywhere else they default to `127.0.0.1`/`5432`.
 
 ## Run the server
 

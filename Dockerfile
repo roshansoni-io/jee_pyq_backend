@@ -19,6 +19,7 @@ RUN groupadd --system --gid 10001 app \
 COPY --chown=app:app app ./app
 
 USER 10001:10001
-EXPOSE 8000
 
-CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${PYQ_WORKERS:-1}"]
+# Bind host, port and worker count come from PYQ_HOST / PYQ_PORT /
+# PYQ_WORKERS (see app/config.py, fed by the container env or .env).
+CMD ["python", "-m", "app"]

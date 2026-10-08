@@ -7,7 +7,6 @@ Run:
 from __future__ import annotations
 
 import json
-import os
 import re
 import sys
 from datetime import date, datetime
@@ -19,15 +18,17 @@ sys.path.insert(0, str(OLD))
 sys.path.insert(0, str(REPO))
 
 from app.chapter_order import CHAPTER_NUMBER
+from app import config
 
 import psycopg
 from tqdm import tqdm
 
 DB_KWARGS = dict(
-    user=os.environ.get("PYQ_DB_USER", "u0_a320"),
-    dbname=os.environ.get("PYQ_DB_NAME", "pyq"),
-    host=os.environ.get("PYQ_DB_HOST", "127.0.0.1"),
-    port=int(os.environ.get("PYQ_DB_PORT", "5432")),
+    user=config.DB_USER,
+    dbname=config.DB_NAME,
+    host=config.DB_HOST,
+    port=int(config.DB_PORT),
+    password=config.DB_PASSWORD,
 )
 
 
