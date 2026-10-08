@@ -28,9 +28,15 @@ Error:
 
 ```json
 {
-  "error": {"code": 404, "message": "Question not found"}
+  "error": {"code": "not_found", "message": "question not found"}
 }
 ```
+
+The HTTP status carries the transport-level status. `error.code` is a stable
+machine-readable application code and is not a copy of that status. Current codes
+include `bad_request`, `not_found`, `method_not_allowed`, `validation_error`,
+`http_error`, and `internal_error`. Validation errors may include a `details` array
+with input locations and messages; internal errors never expose exception details.
 
 ## Object shapes
 
@@ -43,11 +49,16 @@ Error:
 ### Chapter
 
 ```json
-{"id": "thermodynamics", "name": "Thermodynamics", "question_count": 95}
+{"id": "thermodynamics", "name": "Thermodynamics", "chapter_number": 12, "group": "Mechanics", "question_count": 95}
 ```
 
+`chapter_number` is a continuous order within its subject, based on the NCERT Class XI
+then Class XII textbook sequence. It is an order for this question-bank taxonomy, not
+the printed chapter number of a single NCERT book, because several bank chapters split
+or combine textbook chapters. Chapter results are ordered by `chapter_number`.
+
 `name` is the id title-cased (`jee`/`ac`/`dc` stay upper, minor words stay lower after
-the first). Chapters are ordered by chapter group, then by id.
+the first). Chapters are ordered by `chapter_number` within each subject.
 
 `question_count` comes from a grouped subquery over `questions` (see
 `questions_subject_chapter_idx` in schema.sql).
@@ -70,32 +81,41 @@ Used in list responses.
   "subject": "physics",
   "chapter": "thermodynamics",
   "year": 2023,
-  "paper_title": "JEE Main 2023 Session 1",
+  "exam_date": "2023-04-10",
+  "shift": "Shift 1",
+  "paper_title": "JEE Main 2023 (Online) 10th April Morning Shift",
   "difficulty": "medium",
-  "topic": "laws-of-thermodynamics",
+  "topic": {"id": "laws-of-thermodynamics", "name": "Laws of Thermodynamics"},
   "type": "mcq"
 }
 ```
 
-`exam` and `exam_group` are title-cased from their stored slugs. `subject`, `chapter` and
-`topic` are raw slugs.
+`exam` and `exam_group` are title-cased from their stored slugs. `subject` and
+`chapter` are raw slugs; `topic` is an object with a raw `id` slug and display `name`,
+or `null`. `exam_date` is an ISO date or `null`; `shift` is `Shift 1`,
+`Shift 2`, or `null`. The year, date, and shift are independent fields. Existing
+morning/evening slot labels are normalized to shifts 1 and 2.
 
 ### Full Question
 
-Used in single-question and practice responses. Question Summary plus:
+Used in single-question responses. Question Summary plus:
 
 ```json
 {
   "is_bonus": false,
+  "type": "integer",
   "question": "<p>...</p>",
   "options": [{"identifier": "A", "content": "..."}],
-  "correct_options": [0],
-  "answer": "42",
+  "correct_options": [],
+  "answer": null,
   "explanation": "<p>...</p>"
 }
 ```
 
-Integer-type questions carry the answer as a string in `answer` and have empty `correct_options`.
+`answer` is `null` for all questions in the current imported dataset. The source question
+records contain no structured answer values; integer questions also have empty
+`correct_options`. Their explanations may show a result, but the API does not infer an
+answer by parsing explanation text.
 
 `<img>` tags are inlined in `question`, `explanation` and `options[].content`, so no
 separate image flags are returned.
@@ -149,22 +169,33 @@ Query parameters:
 ```json
 {
   "data": [
-    {"id": "kinematics", "name": "Kinematics", "question_count": 120}
+    {"id": "units-and-measurements", "name": "Units and Measurements", "chapter_number": 1, "group": "Mechanics", "question_count": 120}
   ],
-  "meta": {"subject": "physics", "total": 28, "limit": 100, "offset": 0, "has_more": false}
+  "meta": {"subject": "physics", "total": 28, "limit": 100, "offset": 0}
 }
 ```
 
-Chapters are ordered by chapter group, then by id. `total` counts every chapter in the
-subject, so `has_more` is correct across pages.
+Each chapter has a `chapter_number` and a `group` such as `Mechanics` or `Physical
+Chemistry`. `total` counts every chapter in the subject.
 
 Unknown subject → `404` envelope. A subject that exists but has no chapters returns
 `data: []` with `total: 0`, not a 404.
 
-### GET /api/v1/chapters/{chapter_id}/topics
+### GET /api/v1/chapters/{chapter_id}
 
 ```json
-{"data": [{"id": "laws-of-thermodynamics", "name": "Laws of Thermodynamics", "question_count": 15}], "meta": {"chapter": "thermodynamics"}}
+{
+  "data": {
+    "id": "thermodynamics",
+    "name": "Thermodynamics",
+    "chapter_number": 12,
+    "group": "Mechanics",
+    "question_count": 95,
+    "topics": [
+      {"id": "laws-of-thermodynamics", "name": "Laws of Thermodynamics"}
+    ]
+  }
+}
 ```
 
 Unknown chapter → `404` envelope.
@@ -189,13 +220,14 @@ Query parameters:
 | seed       | string | —       | pins `random` order across pages         |
 
 Non-numeric `limit`/`offset` fall back to the default rather than erroring.
+`year` must be an integer; invalid values return a `400` error envelope.
 
 Response:
 
 ```json
 {
   "data": [{"id": "abc123", "...": "..."}],
-  "meta": {"total": 1234, "limit": 50, "offset": 0, "has_more": true, "sort": "newest", "filters": {"subject": "physics"}}
+  "meta": {"total": 1234, "limit": 50, "offset": 0, "sort": "newest", "filters": {"subject": "physics"}}
 }
 ```
 
@@ -204,34 +236,20 @@ Invalid `sort` → `400` envelope.
 ### GET /api/v1/questions/{question_id}
 
 ```json
-{"data": {"id": "abc123", "question": "<p>...</p>", "...": "..."}}
+{
+  "data": {
+    "id": "abc123",
+    "type": "integer",
+    "topic": {"id": "thermodynamics", "name": "Thermodynamics"},
+    "question": "<p>...</p>"
+  }
+}
 ```
 
 Unknown id → `404` envelope.
-
-### GET /api/v1/practice
-
-Same filters as `/questions`, plus:
-
-| param     | type   | default | description                                          |
-| --------- | ------ | ------- | ---------------------------------------------------- |
-| limit     | int    | 10      | page size, clamped to [0, 500]                       |
-| order     | string | random  | `newest`, `oldest`, or `random`; invalid falls back to `random` |
-| seed      | string | —       | pins `random` order across pages                     |
-| question  | string | —       | anchor question id, returned first                   |
-
-Returns Full Questions. `meta.total` is the number of rows returned; `meta.available` is
-the size of the filtered set, and `has_more` compares against it.
-
-```json
-{"data": [{"id": "abc123", "...": "..."}], "meta": {"total": 10, "available": 95, "offset": 0, "has_more": true, "order": "random", "filters": {"chapter": "thermodynamics"}}}
-```
-
-`question` fills the page with siblings of that question and sets `meta.anchored: true`.
-It is looked up subject to the same filters, so an id from a different chapter or subject
-is ignored and the ordinary page is returned instead. `offset` addresses this sequence:
-the anchor occupies position 0 and siblings follow, so pages advance under a `seed`.
-`limit=0` returns an empty page rather than just the anchor.
+`data.topic` is `null` when the question has no topic. The question's `type` remains in
+`data` for both list and single-question responses. Pagination responses omit
+`has_more`; clients can derive it from `total`, `offset`, and the number of returned items.
 
 ### GET /api/v1/cluster
 
@@ -249,6 +267,9 @@ Query parameters:
 | q             | string | —       | substring search, as `/questions` |
 | threshold     | float  | 0.6     | cosine similarity threshold |
 | max_questions | int    | 2000    | clamped to [0, 20000]       |
+
+`threshold` must be finite and within `[-1, 1]`; invalid values return a `400`
+error envelope.
 
 Clusters questions by cosine similarity, greedily: each vector joins the nearest existing
 cluster whose centroid clears `threshold`, otherwise it starts a new one. Centroid

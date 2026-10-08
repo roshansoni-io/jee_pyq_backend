@@ -7,8 +7,10 @@ create table if not exists subjects (
 create table if not exists chapters (
   id text primary key,
   subject_id text not null references subjects(id),
+  chapter_number integer check (chapter_number > 0),
   chapter_group text,
-  name text not null default ''
+  name text not null default '',
+  unique (subject_id, id)
 );
 
 create table if not exists topics (
@@ -26,6 +28,7 @@ create table if not exists questions (
   chapter_group text,
   year integer not null default 0,
   paper_title text not null default '',
+  shift text,
   difficulty text not null default '',
   topic text not null default '',
   type text not null default '',
@@ -39,7 +42,9 @@ create table if not exists questions (
   is_bonus boolean not null default false,
   is_img_question boolean not null default false,
   is_img_explanation boolean not null default false,
-  is_img_option jsonb not null default '[]'::jsonb
+  is_img_option jsonb not null default '[]'::jsonb,
+  foreign key (subject, chapter) references chapters(subject_id, id),
+  foreign key (chapter, topic) references topics(chapter_id, id)
 );
 
 create table if not exists question_embeddings (
@@ -56,6 +61,8 @@ create index if not exists questions_type_idx on questions(type);
 create index if not exists questions_chapter_group_idx on questions(chapter_group);
 -- Covers subject+chapter filters and the per-chapter question_count subquery.
 create index if not exists questions_subject_chapter_idx on questions(subject, chapter);
+create unique index if not exists chapters_subject_number_idx
+  on chapters(subject_id, chapter_number);
 -- Serves the default newest-first page. NULLS LAST must match the sort clause
 -- in filters.order_by exactly, or Postgres falls back to an incremental sort.
 create index if not exists questions_year_date_id_idx

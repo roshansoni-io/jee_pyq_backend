@@ -4,7 +4,7 @@ Serves 14,973 JEE Main previous-year questions over HTTP. See `API.md` for the e
 
 ## Layout
 
-- `app/` — FastAPI application (`main.py` entry point)
+- `app/` — FastAPI application (`main.py` entry point); endpoint routers are split by resource in `app/api/`
 - `scripts/migrate_pkl_to_psql.py` — one-off loader from the old pkl cache into Postgres
 - `schema.sql` — tables, indexes, pgvector extension
 - `API.md` — API reference
@@ -35,7 +35,19 @@ psql -d pyq -f schema.sql
 python3 scripts/migrate_pkl_to_psql.py
 ```
 
-Expected counts: 3 subjects, 91 chapters, 486 topics, 14973 questions, 14973 embeddings.
+Expected counts: 3 subjects, 91 chapters, 577 topic rows (486 named topics plus 91 empty-topic sentinels), 14973 questions, 14973 embeddings.
+
+For an existing database created before the taxonomy integrity constraints were
+added, apply the following once, in order:
+
+```bash
+psql -d pyq -f migrations/001_question_taxonomy_constraints.sql
+psql -d pyq -f migrations/002_question_exam_shift.sql
+python3 scripts/backfill_chapter_numbers.py
+```
+
+Apply these updates before restarting the API. Fresh databases get the current
+schema from `schema.sql`, and the loader writes dates, shifts, and chapter numbers.
 
 ## Config (environment variables)
 

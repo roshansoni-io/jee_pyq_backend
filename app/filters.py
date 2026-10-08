@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any
 
+from fastapi import HTTPException
+
 sort_orders = ("newest", "oldest", "random")
 
 _FILTER_COLUMNS = {
@@ -51,6 +53,12 @@ class QuestionFilters:
 
 
 def parse_filters(qp) -> QuestionFilters:
+    year = qp.get("year")
+    if year is not None:
+        try:
+            year = int(year)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "year must be an integer") from None
     return QuestionFilters(
         subject=qp.get("subject"),
         chapter=qp.get("chapter"),
@@ -58,7 +66,7 @@ def parse_filters(qp) -> QuestionFilters:
         difficulty=qp.get("difficulty"),
         type=qp.get("type"),
         group=qp.get("group"),
-        year=int(qp["year"]) if qp.get("year") is not None else None,
+        year=year,
         q=qp.get("q") or None,
     )
 

@@ -58,9 +58,11 @@ def question_summary(q: dict) -> dict[str, Any]:
         "subject": q["subject"],
         "chapter": q["chapter"],
         "year": q["year"],
+        "exam_date": q["exam_date"].isoformat() if q["exam_date"] else None,
+        "shift": q["shift"],
         "paper_title": q["paper_title"],
         "difficulty": q["difficulty"],
-        "topic": q["topic"],
+        "topic": topic_payload(q["topic"]),
         "type": q["type"],
     }
 
@@ -86,9 +88,13 @@ def chapter_payload(c: dict) -> dict[str, Any]:
     return {
         "id": c["id"],
         "name": humanize(c["id"]),
+        "chapter_number": c["chapter_number"],
+        "group": humanize(c["chapter_group"]) if c["chapter_group"] else None,
         "question_count": c["question_count"],
     }
 
 
-def topic_payload(t: dict) -> dict[str, Any]:
-    return {"id": t["id"], "name": humanize(t["id"]), "question_count": t["question_count"]}
+def topic_payload(topic_id: str | None) -> dict[str, str] | None:
+    if not topic_id:
+        return None
+    return {"id": topic_id, "name": humanize(topic_id)}
