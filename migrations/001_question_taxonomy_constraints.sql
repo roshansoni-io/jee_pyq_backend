@@ -1,4 +1,4 @@
--- Apply once to databases created before the taxonomy foreign keys were added.
+-- Add taxonomy integrity constraints to databases created before these rules.
 begin;
 
 alter table chapters
@@ -11,7 +11,9 @@ on conflict (chapter_id, id) do nothing;
 
 alter table questions
   add constraint questions_subject_chapter_fk
-    foreign key (subject, chapter) references chapters(subject_id, id),
+    foreign key (subject, chapter) references chapters(subject_id, id);
+
+alter table questions
   add constraint questions_chapter_topic_fk
     foreign key (chapter, topic) references topics(chapter_id, id);
 

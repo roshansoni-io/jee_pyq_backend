@@ -24,7 +24,9 @@ def _recompute_centroid(centroids, label, matrix, member_indices):
     return [(l, new_centroid) if l == label else (l, c) for l, c in centroids]
 
 
-def cluster_members(questions: list[Any], vectors: list[list[float]], threshold: float) -> dict:
+def cluster_members(
+    questions: list[Any], vectors: list[list[float]], threshold: float
+) -> dict:
     if not questions:
         return {}
     matrix = np.asarray(vectors, dtype=np.float32)
@@ -40,7 +42,9 @@ def cluster_members(questions: list[Any], vectors: list[list[float]], threshold:
         if best_label is not None and best_similarity >= threshold:
             member_indices[best_label].append(index)
             clusters[best_label].append(question)
-            centroids = _recompute_centroid(centroids, best_label, matrix, member_indices[best_label])
+            centroids = _recompute_centroid(
+                centroids, best_label, matrix, member_indices[best_label]
+            )
         else:
             label = len(centroids)
             centroids.append((label, vector))

@@ -4,10 +4,23 @@ import json
 from functools import lru_cache
 from typing import Any
 
-_minor_words = frozenset({
-    "and", "of", "in", "the", "to", "for",
-    "a", "an", "with", "on", "by", "is", "at",
-})
+_minor_words = frozenset(
+    {
+        "and",
+        "of",
+        "in",
+        "the",
+        "to",
+        "for",
+        "a",
+        "an",
+        "with",
+        "on",
+        "by",
+        "is",
+        "at",
+    }
+)
 _acronyms = frozenset({"jee", "ac", "dc"})
 
 
@@ -69,14 +82,16 @@ def question_summary(q: dict) -> dict[str, Any]:
 
 def question_detail(q: dict) -> dict[str, Any]:
     detail = question_summary(q)
-    detail.update({
-        "is_bonus": q["is_bonus"],
-        "question": q["question"],
-        "options": _json(q["options"]),
-        "correct_options": _json(q["correct_options"]),
-        "answer": _json(q["answer"]),
-        "explanation": q["explanation"],
-    })
+    detail.update(
+        {
+            "is_bonus": q["is_bonus"],
+            "question": q["question"],
+            "options": _json(q["options"]),
+            "correct_options": _json(q["correct_options"]),
+            "answer": _json(q["answer"]),
+            "explanation": q["explanation"],
+        }
+    )
     return detail
 
 

@@ -11,6 +11,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import config
 from .db import close_pool, open_pool, pool
+from .migrations import apply_migrations
 from .api import router
 from .api.errors import (
     ErrorCode,
@@ -32,6 +33,7 @@ def get_conn(request: Request) -> Iterator[psycopg.Connection]:
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI) -> AsyncIterator[None]:
+    apply_migrations()
     open_pool()
     logger.info(
         "pyq api ready: workers=%s pool_size=%s max_overflow=%s",

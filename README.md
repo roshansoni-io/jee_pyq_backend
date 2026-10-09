@@ -24,9 +24,17 @@ image only runs init scripts when its data directory is empty. It does not
 import question data: load the source dataset separately using the existing
 loader workflow, and refresh aggregates afterward with
 `scripts/refresh-question-stats.sql`. Existing databases are not overwritten.
-For an existing deployment, take a backup before applying schema migrations;
-the files in `migrations/` are one-time changes, not an automatic migration
-runner.
+The API applies pending SQL migrations during startup. A database advisory lock
+prevents multiple workers or replicas from applying them at once, and successful
+versions are recorded in `public.pyq_schema_migrations`. Manually applied
+migrations are detected and adopted. The configured database role needs
+permission to alter the schema and create extensions and indexes used by
+migrations. Back up the database before deploying schema changes.
+If a migration's data preconditions are not met, startup logs a warning and
+leaves that migration pending rather than changing or deleting existing data.
+
+`schema.sql` remains the complete bootstrap schema for a new database;
+incremental changes belong in numbered files under `migrations/`.
 
 Keep `.env` out of source control and use your hosting platform's secret store
 for production credentials. The default loopback bind is suitable when a host
@@ -51,7 +59,9 @@ pool of up to ten connections.
 
 - `app/` — FastAPI application (`main.py` entry point); endpoint routers are split by resource in `app/api/`
 - `scripts/migrate_pkl_to_psql.py` — one-off loader from the old pkl cache into Postgres
-- `schema.sql` — tables, indexes, pgvector extension
+- `schema.sql` — complete bootstrap schema for fresh databases
+- `migrations/` — incremental schema changes applied at API startup
+- `DATABASE_STRUCTURE.md` — intended schema and external database snapshot
 - `API.md` — API reference
 
 ## Prerequisites
@@ -82,17 +92,9 @@ python3 scripts/migrate_pkl_to_psql.py
 
 Expected counts: 3 subjects, 91 chapters, 577 topic rows (486 named topics plus 91 empty-topic sentinels), 14973 questions, 14973 embeddings.
 
-For an existing database created before the taxonomy integrity constraints were
-added, apply the following once, in order:
-
-```bash
-psql -d pyq -f migrations/001_question_taxonomy_constraints.sql
-psql -d pyq -f migrations/002_question_exam_shift.sql
-python3 scripts/backfill_chapter_numbers.py
-```
-
-Apply these updates before restarting the API. Fresh databases get the current
-schema from `schema.sql`, and the loader writes dates, shifts, and chapter numbers.
+Fresh databases get the current schema from `schema.sql`, and the loader writes
+dates, shifts, and chapter numbers. The API applies pending migrations before
+opening its connection pool.
 
 ## Config (environment variables)
 

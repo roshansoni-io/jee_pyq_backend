@@ -9,6 +9,10 @@ Run with:
 python3 -m app
 ```
 
+At startup, the API applies pending SQL files from `migrations/` before opening the
+request connection pool. See [`DATABASE_STRUCTURE.md`](DATABASE_STRUCTURE.md) for the
+schema and current external-database snapshot.
+
 Interactive docs: http://localhost:8000/docs
 
 ## Response envelope
@@ -22,7 +26,7 @@ Success:
 }
 ```
 
-`meta` is optional and carries pagination, totals, filters, or clustering metadata.
+`meta` is optional and carries pagination, totals, or filters.
 
 Error:
 
@@ -66,7 +70,7 @@ the first). Chapters are ordered by `chapter_number` within each subject.
 ### Topic
 
 ```json
-{"id": "laws-of-thermodynamics", "name": "Laws of Thermodynamics", "question_count": 15}
+{"id": "laws-of-thermodynamics", "name": "Laws of Thermodynamics"}
 ```
 
 ### Question Summary
@@ -112,10 +116,11 @@ Used in single-question responses. Question Summary plus:
 }
 ```
 
-`answer` is `null` for all questions in the current imported dataset. The source question
-records contain no structured answer values; integer questions also have empty
-`correct_options`. Their explanations may show a result, but the API does not infer an
-answer by parsing explanation text.
+`answer` is `null` for all questions in the current imported dataset. The sibling
+`../jee_mains_pyqs.json` and imported pickle cache both have 3,263 integer questions
+with `answer: null` and `correct_options: []`. Their explanations may show a result,
+but the API does not infer an answer by parsing explanation text. Seven MCQs also
+have empty `correct_options`.
 
 `<img>` tags are inlined in `question`, `explanation` and `options[].content`, so no
 separate image flags are returned.
@@ -128,8 +133,8 @@ separate image flags are returned.
 {"data": {"status": "ok", "questions": 14973, "chapters": 91}}
 ```
 
-Counts both tables on every call, so it reflects the database as it is rather than import
-state.
+Counts the raw `questions` and `chapters` rows on every call. The external database
+now has 91 chapter rows after duplicate cleanup.
 
 ### GET /api/v1/stats
 
@@ -140,14 +145,15 @@ state.
     "total_subjects": 3,
     "total_chapters": 91,
     "by_subject": [{"id": "physics", "count": 5097}],
-    "by_year": [{"year": 2023, "count": 1200}]
+    "by_year": [{"year": 2023, "count": 2112}]
   }
 }
 ```
 
-Reads the `question_stats` materialized view, so counts are as-of the last refresh. Run
+Reads the `question_stats` materialized view, so counts are as of its last refresh. Run
 `psql -d pyq -f scripts/refresh-question-stats.sql` after a bulk import. If the view is
-missing, the aggregates are computed live instead.
+missing, aggregates are computed live instead. The external view needs refreshing
+after the chapter duplicate cleanup to report the corrected chapter count.
 
 ### GET /api/v1/subjects
 
@@ -176,7 +182,8 @@ Query parameters:
 ```
 
 Each chapter has a `chapter_number` and a `group` such as `Mechanics` or `Physical
-Chemistry`. `total` counts every chapter in the subject.
+Chemistry`. Duplicate chapter rows are collapsed by chapter ID, and `total` counts
+distinct IDs in the subject.
 
 Unknown subject → `404` envelope. A subject that exists but has no chapters returns
 `data: []` with `total: 0`, not a 404.
@@ -251,40 +258,5 @@ Unknown id → `404` envelope.
 `data` for both list and single-question responses. Pagination responses omit
 `has_more`; clients can derive it from `total`, `offset`, and the number of returned items.
 
-### GET /api/v1/cluster
-
-Query parameters:
-
-| param         | type   | default | description                 |
-| ------------- | ------ | ------- | --------------------------- |
-| subject       | string | —       | filter by subject           |
-| chapter       | string | —       | filter by chapter           |
-| topic         | string | —       | filter by topic             |
-| group         | string | —       | filter by chapter group     |
-| difficulty    | string | —       | filter by difficulty        |
-| type          | string | —       | filter by question type     |
-| year          | int    | —       | filter by year              |
-| q             | string | —       | substring search, as `/questions` |
-| threshold     | float  | 0.6     | cosine similarity threshold |
-| max_questions | int    | 2000    | clamped to [0, 20000]       |
-
-`threshold` must be finite and within `[-1, 1]`; invalid values return a `400`
-error envelope.
-
-Clusters questions by cosine similarity, greedily: each vector joins the nearest existing
-cluster whose centroid clears `threshold`, otherwise it starts a new one. Centroid
-similarity uses raw dot products, so only vectors from `question_embeddings` are
-clustered; ids without one are returned in `missing_embedding`. `q` and `max_questions`
-take the same non-numeric fallback as `/questions`.
-
-```json
-{
-  "data": {
-    "clusters": [
-      {"cluster_id": 0, "size": 15, "representative_question_id": "q_001", "question_ids": ["q_001", "q_002"]}
-    ],
-    "missing_embedding": ["q_004"]
-  },
-  "meta": {"num_clusters": 5, "threshold": 0.6}
-}
-```
+The cluster handler exists in the codebase but is not registered on the API router, so
+`/api/v1/cluster` is not currently available.

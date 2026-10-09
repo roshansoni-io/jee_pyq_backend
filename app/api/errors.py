@@ -40,12 +40,19 @@ def code_for_http_status(status_code: int) -> str:
 
 async def handle_http_error(_: Request, exc: StarletteHTTPException) -> JSONResponse:
     message = exc.detail if isinstance(exc.detail, str) else "request failed"
-    return error_response(exc.status_code, code_for_http_status(exc.status_code), message)
+    return error_response(
+        exc.status_code, code_for_http_status(exc.status_code), message
+    )
 
 
-async def handle_validation_error(_: Request, exc: RequestValidationError) -> JSONResponse:
+async def handle_validation_error(
+    _: Request, exc: RequestValidationError
+) -> JSONResponse:
     errors = [
-        {"location": list(item.get("loc", ())), "message": item.get("msg", "invalid value")}
+        {
+            "location": list(item.get("loc", ())),
+            "message": item.get("msg", "invalid value"),
+        }
         for item in exc.errors()
     ]
     message = errors[0]["message"] if errors else "invalid request"

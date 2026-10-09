@@ -32,13 +32,7 @@ def _page(
     limit: int,
     offset: int,
 ) -> list[dict]:
-    """Fetch one page in the requested order.
-
-    A random order under 250 rows samples ids first, then reloads them by primary
-    key: sorting wide detail rows for `order by random()` costs ~2x (61 ms vs
-    29 ms) because each comparison drags `options`/`explanation` jsonb along.
-    Larger pages take the single-query path, where the id list stops being small.
-    """
+    """Fetch one page in the requested order."""
     if clause.strip() != "order by random()" or limit > 250:
         return fetch_all(
             conn,
@@ -65,7 +59,9 @@ def list_questions(request: Request):
     limit, offset = limit_offset(qp, default_page_size, max_page_size)
     sort_order = qp.get("sort", "newest")
     if sort_order not in sort_orders:
-        raise HTTPException(400, f"invalid sort '{sort_order}', expected one of {sort_orders}")
+        raise HTTPException(
+            400, f"invalid sort '{sort_order}', expected one of {sort_orders}"
+        )
     filters = parse_filters(qp)
     where, params = filters.where()
     # A seed pins the random order across pages.
@@ -77,7 +73,9 @@ def list_questions(request: Request):
         extra = ()
     conn = request.state.conn
     total = fetch_one(conn, f"select count(*) as n from questions{where}", params)["n"]
-    rows = _page(conn, QUESTION_SUMMARY_COLS, where, tuple(params), clause, extra, limit, offset)
+    rows = _page(
+        conn, QUESTION_SUMMARY_COLS, where, tuple(params), clause, extra, limit, offset
+    )
     return ok(
         [question_summary(r) for r in rows],
         meta={

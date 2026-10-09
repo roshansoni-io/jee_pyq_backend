@@ -17,6 +17,7 @@ RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 
 COPY --chown=app:app app ./app
+COPY --chown=app:app migrations ./migrations
 
 USER 10001:10001
 

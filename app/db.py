@@ -13,6 +13,9 @@ pool = ConnectionPool(
     conninfo=config.DATABASE_URL,
     min_size=config.DB_POOL_SIZE,
     max_size=config.DB_POOL_SIZE + config.DB_POOL_MAX_OVERFLOW,
+    max_idle=60,       
+    max_lifetime=300,         
+    reconnect_timeout=30, 
     open=False,
     kwargs={"row_factory": dict_row},
 )

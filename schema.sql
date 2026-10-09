@@ -1,4 +1,5 @@
 create extension if not exists vector;
+create extension if not exists pg_trgm;
 
 create table if not exists subjects (
   id text primary key
@@ -43,8 +44,10 @@ create table if not exists questions (
   is_img_question boolean not null default false,
   is_img_explanation boolean not null default false,
   is_img_option jsonb not null default '[]'::jsonb,
-  foreign key (subject, chapter) references chapters(subject_id, id),
-  foreign key (chapter, topic) references topics(chapter_id, id)
+  constraint questions_subject_chapter_fk
+    foreign key (subject, chapter) references chapters(subject_id, id),
+  constraint questions_chapter_topic_fk
+    foreign key (chapter, topic) references topics(chapter_id, id)
 );
 
 create table if not exists question_embeddings (
@@ -67,6 +70,17 @@ create unique index if not exists chapters_subject_number_idx
 -- in filters.order_by exactly, or Postgres falls back to an incremental sort.
 create index if not exists questions_year_date_id_idx
   on questions(year desc, exam_date desc nulls last, id desc);
+-- Supports the contains-style ILIKE predicates used by the question search.
+create index if not exists questions_chapter_trgm_idx
+  on questions using gin (chapter gin_trgm_ops);
+create index if not exists questions_topic_trgm_idx
+  on questions using gin (topic gin_trgm_ops);
+create index if not exists questions_paper_title_trgm_idx
+  on questions using gin (paper_title gin_trgm_ops);
+create index if not exists questions_exam_trgm_idx
+  on questions using gin (exam gin_trgm_ops);
+create index if not exists questions_exam_group_trgm_idx
+  on questions using gin (exam_group gin_trgm_ops);
 create index if not exists question_embeddings_embedding_idx
   on question_embeddings using hnsw (embedding vector_cosine_ops);
 
