@@ -38,7 +38,12 @@ def _env(name: str, default: str | None = None) -> str | None:
 
 def _env_int(name: str, default: int) -> int:
     value = _env(name)
-    return int(value) if value is not None else default
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        raise RuntimeError(f"invalid integer for {name}: {value!r}") from None
 
 
 DB_USER = _env("PYQ_DB_USER", "u0_a320")
@@ -57,6 +62,6 @@ DATABASE_URL = _env(
 )
 
 SERVER_HOST = _env("PYQ_HOST", "0.0.0.0")
-SERVER_PORT = int(_env("PYQ_PORT", "8000"))
+SERVER_PORT = _env_int("PYQ_PORT", 8000)
 # Single worker by default.
 SERVER_WORKERS = _env_int("PYQ_WORKERS", 1)

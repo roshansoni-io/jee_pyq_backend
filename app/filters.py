@@ -17,6 +17,10 @@ _FILTER_COLUMNS = {
 }
 
 
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @dataclass(frozen=True)
 class QuestionFilters:
     subject: str | None = None
@@ -44,15 +48,21 @@ class QuestionFilters:
             params.append(self.year)
         if self.q is not None:
             # The human-readable columns the question bank shows on each row.
+            # Escape LIKE wildcards so user input is matched literally.
             searchable = ("chapter", "topic", "paper_title", "exam", "exam_group")
             clauses.append(
-                "(" + " or ".join(f"{prefix}{col} ilike %s" for col in searchable) + ")"
+                "("
+                + " or ".join(f"{prefix}{col} ilike %s escape '\\'" for col in searchable)
+                + ")"
             )
-            params.extend([f"%{self.q}%"] * len(searchable))
+            params.extend([f"%{_escape_like(self.q)}%"] * len(searchable))
         return (" where " + " and ".join(clauses)) if clauses else "", params
 
 
 def parse_filters(qp) -> QuestionFilters:
+    def _opt(name: str) -> str | None:
+        return qp.get(name) or None
+
     year = qp.get("year")
     if year is not None:
         try:
@@ -60,12 +70,12 @@ def parse_filters(qp) -> QuestionFilters:
         except (TypeError, ValueError):
             raise HTTPException(400, "year must be an integer") from None
     return QuestionFilters(
-        subject=qp.get("subject"),
-        chapter=qp.get("chapter"),
-        topic=qp.get("topic"),
-        difficulty=qp.get("difficulty"),
-        type=qp.get("type"),
-        group=qp.get("group"),
+        subject=_opt("subject"),
+        chapter=_opt("chapter"),
+        topic=_opt("topic"),
+        difficulty=_opt("difficulty"),
+        type=_opt("type"),
+        group=_opt("group"),
         year=year,
         q=qp.get("q") or None,
     )

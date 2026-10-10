@@ -68,7 +68,7 @@ pool of up to ten connections.
 
 - PostgreSQL 18 running locally (socket dir `/data/data/com.termux/files/usr/tmp`, TCP 127.0.0.1:5432)
 - pgvector extension available in the cluster
-- Python 3.14 system packages: fastapi, uvicorn, psycopg, psycopg-pool, numpy, pgvector
+- Python 3.14 system packages: fastapi, uvicorn, psycopg, psycopg-pool, pgvector
 
 Start Postgres:
 
