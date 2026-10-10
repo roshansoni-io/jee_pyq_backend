@@ -1,11 +1,5 @@
 """NCERT-based sequence for the chapter taxonomy in this question bank.
 
-The source taxonomy splits and combines NCERT chapters, so these are continuous
-per-subject positions following NCERT's class XI then class XII textbook order,
-not the printed chapter numbers from an individual textbook.
-
-Ordering follows the NCERT Physics, Chemistry, and Mathematics textbooks for
-Classes XI and XII. The names below are the question-bank chapter slugs.
 """
 
 CHAPTERS_IN_ORDER: dict[str, tuple[str, ...]] = {

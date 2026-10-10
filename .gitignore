@@ -3,7 +3,9 @@ __pycache__/
 .venv/
 pg.log
 .env
+# legacy scratch dir: nothing in the codebase may reference it.
 .local/
+log/
 *.sqlite3
 *.sqlite3.tmp
 *.db

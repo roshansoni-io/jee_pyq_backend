@@ -38,16 +38,19 @@ _have_stats_view = False
 def _stats_view_available(conn) -> bool:
     global _have_stats_view
     if not _have_stats_view:
-        row = fetch_one(conn, "select to_regclass('question_stats') as r")
-        _have_stats_view = row["r"] is not None
+        row = fetch_one(
+            conn,
+            "select name as r from sqlite_master where type = 'table' and name = 'question_stats'",
+        )
+        _have_stats_view = row is not None
     return _have_stats_view
 
 
 def _stats_from_view(conn) -> dict:
     rows = fetch_all(
         conn,
-        "select axis, key, count from question_stats where axis = any(%s)",
-        (["subject", "year", "total"],),
+        "select axis, key, count from question_stats where axis in (%s, %s, %s)",
+        ("subject", "year", "total"),
     )
     totals = {r["key"]: int(r["count"]) for r in rows if r["axis"] == "total"}
     return {

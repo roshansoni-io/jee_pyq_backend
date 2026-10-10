@@ -49,10 +49,12 @@ class QuestionFilters:
         if self.q is not None:
             # The human-readable columns the question bank shows on each row.
             # Escape LIKE wildcards so user input is matched literally.
+            # SQLite LIKE is case-insensitive for ASCII; PG ILIKE covered
+            # Unicode too — acceptable drift for a 15k-row local artifact.
             searchable = ("chapter", "topic", "paper_title", "exam", "exam_group")
             clauses.append(
                 "("
-                + " or ".join(f"{prefix}{col} ilike %s escape '\\'" for col in searchable)
+                + " or ".join(f"{prefix}{col} like %s escape '\\'" for col in searchable)
                 + ")"
             )
             params.extend([f"%{_escape_like(self.q)}%"] * len(searchable))
@@ -90,5 +92,5 @@ def order_by(order: str) -> str:
 
 
 def seeded_order_by(seed: str) -> str:
-    """Order by `md5(id || seed)`: a fresh shuffle per seed, stable within one."""
-    return "order by md5(id::text || %s)"
+    """Order by `md5(id, seed)`: a fresh shuffle per seed, stable within one."""
+    return "order by md5(id, %s)"

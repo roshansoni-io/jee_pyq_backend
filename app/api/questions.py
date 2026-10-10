@@ -48,7 +48,8 @@ def _page(
     ids = [r["id"] for r in sampled]
     if not ids:
         return []
-    rows = fetch_all(conn, f"select {cols} from questions where id = any(%s)", (ids,))
+    marks = ", ".join("%s" for _ in ids)
+    rows = fetch_all(conn, f"select {cols} from questions where id in ({marks})", tuple(ids))
     by_id = {r["id"]: r for r in rows}
     return [by_id[i] for i in ids if i in by_id]
 

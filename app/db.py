@@ -1,56 +1,73 @@
 from __future__ import annotations
 
+import hashlib
+import sqlite3
 from contextlib import contextmanager
 from typing import Any, Iterator
 
-import psycopg
-from psycopg.rows import dict_row
-from psycopg_pool import ConnectionPool
-
 from . import config
 
-pool = ConnectionPool(
-    conninfo=config.DATABASE_URL,
-    min_size=config.DB_POOL_SIZE,
-    max_size=config.DB_POOL_SIZE + config.DB_POOL_MAX_OVERFLOW,
-    max_idle=60,       
-    max_lifetime=300,         
-    reconnect_timeout=30, 
-    open=False,
-    kwargs={"row_factory": dict_row},
-)
+
+def _connect() -> sqlite3.Connection:
+    """Open a read-only connection to the SQLite artifact.
+
+    """
+    conn = sqlite3.connect(
+        f"file:{config.SQLITE_PATH}?mode=ro",
+        uri=True,
+        timeout=10.0,
+        check_same_thread=False,
+    )
+    conn.row_factory = sqlite3.Row
+    conn.create_function(
+        "md5", 2, lambda a, b: hashlib.md5(f"{a}{b}".encode()).hexdigest()
+    )
+    return conn
 
 
 def open_pool() -> None:
-    """Open the pool and wait for `min_size` connections; a timeout is ignored."""
-    pool.open()
+    """Kept for lifespan symmetry: verify the file opens (fail fast)."""
+    if not config.SQLITE_PATH.is_file():
+        raise RuntimeError(f"sqlite database not found: {config.SQLITE_PATH}")
+    conn = _connect()
     try:
-        pool.wait(timeout=15.0)
-    except Exception:  # pragma: no cover - startup convenience only
-        pass
+        conn.execute("select 1").fetchone()
+    finally:
+        conn.close()
 
 
 def close_pool() -> None:
-    pool.close()
+    return None
 
 
 @contextmanager
-def connection() -> Iterator[psycopg.Connection]:
-    with pool.connection() as conn:
+def connection() -> Iterator[sqlite3.Connection]:
+    conn = _connect()
+    try:
         yield conn
+    finally:
+        conn.close()
+
+
+def _translate(sql: str) -> str:
+    # All queries in this codebase use %s only as parameter placeholders
+    # (LIKE patterns live in the params, not the SQL), so a plain replace
+    # is safe and keeps every call site unchanged.
+    return sql.replace("%s", "?")
 
 
 def fetch_all(conn, sql: str, params=()) -> list[dict[str, Any]]:
-    with conn.cursor() as cur:
-        cur.execute(sql, tuple(params))
-        if cur.description is None:
-            return []
-        return cur.fetchall()
+    cur = conn.execute(_translate(sql), tuple(params))
+    try:
+        return [dict(row) for row in cur.fetchall()]
+    finally:
+        cur.close()
 
 
 def fetch_one(conn, sql: str, params=()) -> dict[str, Any] | None:
-    with conn.cursor() as cur:
-        cur.execute(sql, tuple(params))
-        if cur.description is None:
-            return None
-        return cur.fetchone()
+    cur = conn.execute(_translate(sql), tuple(params))
+    try:
+        row = cur.fetchone()
+        return dict(row) if row is not None else None
+    finally:
+        cur.close()
