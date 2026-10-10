@@ -6,12 +6,12 @@ All requests/responses are JSON (`Content-Type: application/json`). JSON keys ar
 Run with:
 
 ```bash
+python3 scripts/download_sqlite.py  # once: fetches pyq.sqlite3
 python3 -m app
 ```
 
-At startup, the API applies pending SQL files from `migrations/` before opening the
-request connection pool. See [`DATABASE_STRUCTURE.md`](DATABASE_STRUCTURE.md) for the
-schema and current external-database snapshot.
+At startup, the API verifies `pyq.sqlite3` holds the required tables, then
+serves one read-only connection per request.
 
 Interactive docs: http://localhost:8000/docs
 
@@ -64,8 +64,8 @@ or combine textbook chapters. Chapter results are ordered by `chapter_number`.
 `name` is the id title-cased (`jee`/`ac`/`dc` stay upper, minor words stay lower after
 the first). Chapters are ordered by `chapter_number` within each subject.
 
-`question_count` comes from a grouped subquery over `questions` (see
-`questions_subject_chapter_idx` in schema.sql).
+`question_count` comes from a grouped subquery over `questions` (served by the
+`questions_subject_chapter_idx` index in `pyq.sqlite3`).
 
 ### Topic
 
@@ -133,8 +133,7 @@ separate image flags are returned.
 {"data": {"status": "ok", "questions": 14973, "chapters": 91}}
 ```
 
-Counts the raw `questions` and `chapters` rows on every call. The external database
-now has 91 chapter rows after duplicate cleanup.
+Counts the raw `questions` and `chapters` rows on every call.
 
 ### GET /api/v1/stats
 
@@ -150,10 +149,8 @@ now has 91 chapter rows after duplicate cleanup.
 }
 ```
 
-Reads the `question_stats` materialized view, so counts are as of its last refresh. Run
-`psql -d pyq -f scripts/refresh-question-stats.sql` after a bulk import. If the view is
-missing, aggregates are computed live instead. The external view needs refreshing
-after the chapter duplicate cleanup to report the corrected chapter count.
+Reads the `question_stats` table shipped inside `pyq.sqlite3`. If the table is
+missing, aggregates are computed live instead.
 
 ### GET /api/v1/subjects
 

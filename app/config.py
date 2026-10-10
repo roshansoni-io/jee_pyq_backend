@@ -4,11 +4,13 @@ import os
 from pathlib import Path
 
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 def _load_env_file(path: Path) -> None:
-    """Overlay KEY=VALUE pairs from a dotenv file. Real environment variables
-    always win, so exported values and container env keep precedence."""
+    """Overlay KEY=VALUE pairs from a dotenv file.
+    
+    """
     try:
         text = path.read_text(encoding="utf-8")
     except OSError:
@@ -46,20 +48,13 @@ def _env_int(name: str, default: int) -> int:
         raise RuntimeError(f"invalid integer for {name}: {value!r}") from None
 
 
-DB_USER = _env("PYQ_DB_USER", "u0_a320")
-DB_NAME = _env("PYQ_DB_NAME", "pyq")
-DB_HOST = _env("PYQ_DB_HOST", "127.0.0.1")
-DB_PORT = _env("PYQ_DB_PORT", "5432")
-DB_PASSWORD = _env("PYQ_DB_PASSWORD")
-# Pool size per worker process.
-DB_POOL_SIZE = _env_int("PYQ_DB_POOL_SIZE", 10)
-DB_POOL_MAX_OVERFLOW = _env_int("PYQ_DB_POOL_MAX_OVERFLOW", 10)
-
-# libpq conninfo string.
-DATABASE_URL = _env(
-    "PYQ_DATABASE_URL",
-    f"postgresql://{DB_USER}{':' + DB_PASSWORD if DB_PASSWORD else ''}@{DB_HOST}:{DB_PORT}/{DB_NAME}",
+# SQLite artifact served by the API. Fetch with scripts/download_sqlite.py.
+_sqlite = _env("PYQ_SQLITE_PATH", "pyq.sqlite3")
+SQLITE_PATH = (
+    Path(_sqlite) if Path(_sqlite).is_absolute() else REPO_ROOT / _sqlite
 )
+# When the artifact is missing at startup, download it from here first.
+SQLITE_URL = _env("PYQ_SQLITE_URL")
 
 SERVER_HOST = _env("PYQ_HOST", "0.0.0.0")
 SERVER_PORT = _env_int("PYQ_PORT", 8000)

@@ -64,6 +64,11 @@ def _json(v):
 
 
 def question_summary(q: dict) -> dict[str, Any]:
+    exam_date = q["exam_date"]
+    # Postgres returns a date object; SQLite returns the ISO string stored
+    # by the exporter. Accept both.
+    if hasattr(exam_date, "isoformat"):
+        exam_date = exam_date.isoformat()
     return {
         "id": q["id"],
         "exam": humanize(q["exam"]),
@@ -71,7 +76,7 @@ def question_summary(q: dict) -> dict[str, Any]:
         "subject": q["subject"],
         "chapter": q["chapter"],
         "year": q["year"],
-        "exam_date": q["exam_date"].isoformat() if q["exam_date"] else None,
+        "exam_date": exam_date,
         "shift": q["shift"],
         "paper_title": q["paper_title"],
         "difficulty": q["difficulty"],
@@ -84,7 +89,8 @@ def question_detail(q: dict) -> dict[str, Any]:
     detail = question_summary(q)
     detail.update(
         {
-            "is_bonus": q["is_bonus"],
+            # SQLite stores booleans as 0/1 integers; normalize to bool.
+            "is_bonus": bool(q["is_bonus"]),
             "question": q["question"],
             "options": _json(q["options"]),
             "correct_options": _json(q["correct_options"]),

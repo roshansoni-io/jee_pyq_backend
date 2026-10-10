@@ -17,7 +17,7 @@ RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --no-create-home app
 
 COPY --chown=app:app app ./app
-COPY --chown=app:app migrations ./migrations
+COPY --chown=app:app scripts/download_sqlite.py ./scripts/download_sqlite.py
 
 USER 10001:10001
 
